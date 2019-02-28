@@ -2,7 +2,7 @@
    The library provides "@type ..." syntax extension and plugins like show, etc.
 *)
 open GT 
-    
+open List
 (* Simple expressions: syntax and semantics *)
 module Expr =
   struct
@@ -41,8 +41,33 @@ module Expr =
        Takes a state and an expression, and returns the value of the expression in 
        the given state.
     *)
-    let eval _ = failwith "Not implemented yet"
+	let castIntToBool (i : int) 	: bool 	= match i with
+		| 0 -> false
+		| _ -> true;;
 
+	let castBoolToInt (b : bool)	: int 	= match b with
+		| false -> 0
+		| true 	-> 1;;
+
+	let operate operation x y		: int	= match operation with
+		| "+" 	-> x + y
+		| "-" 	-> x - y
+		| "/" 	-> x / y
+		| "*" 	-> x * y
+		| "%" 	-> x mod y
+		| ">" 	-> castBoolToInt (x > y)
+		| ">=" 	-> castBoolToInt (x >= y)
+		| "<" 	-> castBoolToInt (x < y)
+		| "<=" 	-> castBoolToInt (x <= y)
+		| "==" 	-> castBoolToInt (x == y)
+		| "!=" 	-> castBoolToInt (x != y)
+		| "&&" 	-> castBoolToInt ((castIntToBool x) && (castIntToBool y))
+		| "!!" 	-> castBoolToInt ((castIntToBool x) || (castIntToBool y));;
+
+	let rec eval st exp = match exp with
+		| Const n -> n
+		| Var x	-> st x
+		| Binop (operation, x, y) -> operate operation (eval st x) (eval st y);; 
   end
                     
 (* Simple statements: syntax and sematics *)
@@ -65,7 +90,12 @@ module Stmt =
 
        Takes a configuration and a statement, and returns another configuration
     *)
-    let eval _ = failwith "Not implemented yet"
+
+	let rec eval (state, input, output) st = match st with
+		| Read    var		-> (Expr.update var (List.hd input) state, List.tl input, output)
+		| Write   exp		-> (state, input, output @ [Expr.eval state exp])
+		| Assign (var, exp)	-> (Expr.update var (Expr.eval state exp) state, input, output)
+		| Seq    (e1, e2)	-> eval (eval (state, input, output) e1) e2;;
                                                          
   end
 

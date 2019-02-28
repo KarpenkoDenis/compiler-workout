@@ -1,5 +1,6 @@
 open GT       
-       
+open Syntax
+
 (* The type for the stack machine instructions *)
 @type insn =
 (* binary operator                 *) | BINOP of string
@@ -23,7 +24,17 @@ type config = int list * Syntax.Stmt.config
 
    Takes a configuration and a program, and returns a configuration as a result
  *)                         
-let eval _ = failwith "Not yet implemented"
+let rec eval (st, (state, input, output)) prog =
+    match prog with
+	| []            -> (st, (state, input, output))
+	| BINOP op :: p ->	let y :: x :: st1 = st in
+						let res = Expr.eval state (Binop (op, Const x, Const y))
+						in eval (res :: st1, (state, input, output)) p
+	| CONST c  :: p -> eval (c :: st, (state, input, output)) p
+	| READ     :: p -> eval ((List.hd input) :: st, (state, List.tl input, output)) p
+	| WRITE    :: p -> eval (List.tl st, (state, input, output @ [List.hd st])) p
+	| LD x     :: p -> eval (state x :: st, (state, input, output)) p
+	| ST x     :: p -> eval (List.tl st, (Expr.update x (List.hd st) state, input, output)) p 
 
 (* Top-level evaluation
 
@@ -40,5 +51,13 @@ let run i p = let (_, (_, _, o)) = eval ([], (Syntax.Expr.empty, i, [])) p in o
    Takes a program in the source language and returns an equivalent program for the
    stack machine
  *)
+let rec compile_expr e = match e with
+	| Syntax.Expr.Const  n         -> [CONST n]
+	| Syntax.Expr.Var    x         -> [LD x]
+	| Syntax.Expr.Binop (op, a, b) -> (compile_expr a)@(compile_expr b)@[BINOP op]
 
-let compile _ = failwith "Not yet implemented"
+let rec compile st = match st with
+	| Syntax.Stmt.Read    x       -> [READ; ST x]
+	| Syntax.Stmt.Write   e       -> (compile_expr e)@[WRITE]
+	| Syntax.Stmt.Assign (x, e)   -> (compile_expr e)@[ST x]
+	| Syntax.Stmt.Seq    (s1, s2) -> (compile s1)@(compile s2)
