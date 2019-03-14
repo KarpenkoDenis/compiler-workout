@@ -2,6 +2,7 @@
    The library provides "@type ..." syntax extension and plugins like show, etc.
 *)
 open GT
+open List
 
 (* Opening a library for combinator-based syntax analysis *)
 open Ostap.Combinators
@@ -44,8 +45,36 @@ module Expr =
        Takes a state and an expression, and returns the value of the expression in 
        the given state.
     *)
-    let eval _ = failwith "Not implemented yet"
+	let castIntToBool (i : int) 	: bool 	= match i with
 
+ 		| 0 -> false
+		| _ -> true;;
+
+ 	let castBoolToInt (b : bool)	: int 	= match b with
+		| false -> 0
+		| true 	-> 1;;
+
+ 	let operate operation x y		: int	= match operation with
+		| "+" 	-> x + y
+		| "-" 	-> x - y
+		| "/" 	-> x / y
+		| "*" 	-> x * y
+		| "%" 	-> x mod y
+		| ">" 	-> castBoolToInt (x > y)
+		| ">=" 	-> castBoolToInt (x >= y)
+		| "<" 	-> castBoolToInt (x < y)
+		| "<=" 	-> castBoolToInt (x <= y)
+		| "==" 	-> castBoolToInt (x == y)
+		| "!=" 	-> castBoolToInt (x != y)
+		| "&&" 	-> castBoolToInt ((castIntToBool x) && (castIntToBool y))
+		| "!!" 	-> castBoolToInt ((castIntToBool x) || (castIntToBool y));;
+
+ 	let rec eval st exp = match exp with
+		| Const n -> n
+		| Var x	-> st x
+		| Binop (operation, x, y) -> operate operation (eval st x) (eval st y);; 
+		
+	let expParserBinop op = ostap(- $(op)), (fun x y -> Binop (op, x, y))
     (* Expression parser. You can use the following terminals:
 
          IDENT   --- a non-empty identifier a-zA-Z[a-zA-Z0-9_]* as a string
@@ -53,7 +82,21 @@ module Expr =
    
     *)
     ostap (
-      parse: empty {failwith "Not implemented yet"}
+		expr:
+			!(Ostap.Util.expr
+				(fun x -> x)
+				(Array.map (fun (asc, ops) -> asc, List.map expParserBinop ops)
+					[|
+						`Lefta, ["!!"];
+						`Lefta, ["&&"];
+						`Nona , ["<="; "<"; ">="; ">"; "=="; "!="];
+						`Lefta, ["+"; "-"];
+						`Lefta, ["*"; "/"; "%"];
+					|]
+				)
+				primary
+			);
+      	primary: x:IDENT {Var x} | c:DECIMAL {Const c} | -"(" expr -")"
     )
 
   end
@@ -78,11 +121,20 @@ module Stmt =
 
        Takes a configuration and a statement, and returns another configuration
     *)
-    let eval _ = failwith "Not implemented yet"
+    let rec eval (state, input, output) st = match st with
+		| Read    var		-> (Expr.update var (List.hd input) state, List.tl input, output)
+		| Write   exp		-> (state, input, output @ [Expr.eval state exp])
+		| Assign (var, exp)	-> (Expr.update var (Expr.eval state exp) state, input, output)
+		| Seq    (e1, e2)	-> eval (eval (state, input, output) e1) e2;;
 
     (* Statement parser *)
     ostap (
-      parse: empty {failwith "Not implemented yet"}
+		line:
+		x:IDENT ":=" e:!(Expr.expr)         {Assign (x, e)}
+		| "read"  "("  x:IDENT        ")"   {Read x}
+		| "write" "("  e:!(Expr.expr) ")"   {Write e};
+			
+		parse: l:line ";" rest:parse {Seq (l, rest)} | line
     )
       
   end
